@@ -2,6 +2,7 @@ package main
 
 import (
 	"gin-blog-app/controler"
+	"gin-blog-app/database"
 	"gin-blog-app/middleware"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 )
 
 func main() {
+
+	//db init
+	database.InitDB()
 
 	//multiplexer
 	router := gin.New()
