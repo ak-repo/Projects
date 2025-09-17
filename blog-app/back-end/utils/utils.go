@@ -3,8 +3,6 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"gin-blog-app/database"
-	"gin-blog-app/model"
 	"log"
 
 	"github.com/google/uuid"
@@ -23,8 +21,9 @@ func GenerateHashedPassword(password string) (string, error) {
 }
 
 // compare hashed password
-func CompareHashAndPassword(password, hased string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(password), []byte(hased))
+// compare user-entered password with hashed password from DB
+func CompareHashAndPassword(password, hashed string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password))
 	return err == nil
 }
 
@@ -41,32 +40,31 @@ func GenerateToken(length int) string {
 
 //----------------------------------USER-----------------------------------------
 
-// db checker is in DB
-func UserFinder(username string) (model.User, bool) {
+// // db checker is in DB
+// func UserFinder(username string) (model.User, bool) {
 
-	var user model.User
+// 	var user model.User
 
-	for _, u := range database.UsersDB {
-		if u.Username == username {
-			return u, true
-		}
-	}
+// 	for _, u := range database.UsersDB {
+// 		if u.Username == username {
+// 			return u, true
+// 		}
+// 	}
 
-	return user, false
-}
+// 	return user, false
+// }
 
-// update user info
-func UserUpdater(user model.User) bool {
-	for i, u := range database.UsersDB {
-		if u.Username == user.Username {
-			database.UsersDB[i] = user
-			return true
-		}
-	}
+// // update user info
+// func UserUpdater(user model.User) bool {
+// 	for i, u := range database.UsersDB {
+// 		if u.Username == user.Username {
+// 			database.UsersDB[i] = user
+// 			return true
+// 		}
+// 	}
 
-	return false
+// 	return false
 
-}
+// }
 
 //------------------------------------------POST---DB----utils--------------------------
-

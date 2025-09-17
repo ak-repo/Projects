@@ -17,15 +17,10 @@ func HomeHandler(c *gin.Context) {
 
 }
 
-// post page handler
-func PostPageHandler(c *gin.Context) {
-	c.JSON(http.StatusOK, database.PostList)
-
-}
-
 //---------------------------AUth----------------------------------------------
 
 // registration
+
 func RegistrationHandler(c *gin.Context) {
 
 	var newUser model.UserRegisterInput
@@ -46,22 +41,31 @@ func RegistrationHandler(c *gin.Context) {
 		return
 	}
 
-	//check already exist
-	if _, ok := utils.UserFinder(newUser.Username); ok {
-		c.JSON(http.StatusConflict, gin.H{"error": ok})
+	// check the username already exist in DB
+	var existingUser model.User
+	if err := database.DB.Where("username = ?", newUser.Username).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Username alreay exists"})
 		return
 
 	}
 
 	//password hashing
-	hashedPassword, _ := utils.GenerateHashedPassword(newUser.Password)
+	hashedPassword, err := utils.GenerateHashedPassword(newUser.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "password hashing failed"})
+		return
+	}
 
 	// add user into dp
 	user := model.User{
 		Username:       newUser.Username,
 		HashedPassword: hashedPassword,
 	}
-	database.UsersDB = append(database.UsersDB, user)
+
+	if err := database.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register user"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Registration successful"})
 
@@ -76,11 +80,16 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
-	user, ok := utils.UserFinder(loginUser.Username)
+	var user model.User
+	// find user by username
+	if err := database.DB.Where("username=?", loginUser.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username"})
+		return
+	}
 
-	//verification:= password, username
-	if !ok || utils.CompareHashAndPassword(loginUser.Password, user.HashedPassword) {
-		c.JSON(http.StatusConflict, gin.H{"error": "Invalid password or username"})
+	// Verify password
+	if !utils.CompareHashAndPassword(loginUser.Password, user.HashedPassword) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Invalid password"})
 		return
 	}
 
@@ -88,17 +97,19 @@ func LoginHandler(c *gin.Context) {
 	sessionToken := utils.GenerateToken(32)
 	csrfToken := utils.GenerateToken(32)
 
-	//cookie
+	// Update tokens on DB
+	if err := database.DB.Model(&user).Updates(map[string]interface{}{
+		"session_token": sessionToken,
+		"csrf_token":    csrfToken,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tokens"})
+		return
 
+	}
+
+	//cookie
 	c.SetCookie("session_token", sessionToken, 3600*24, "/", "", false, true)
 	c.SetCookie("csrf_token", csrfToken, 3600*24, "/", "", false, false)
-
-	// update on db
-	user.CSRFToken = csrfToken
-	user.SessionToken = sessionToken
-
-	utils.UserUpdater(user)
-
 	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
 
 }
@@ -112,15 +123,13 @@ func LogoutHandler(c *gin.Context) {
 		return
 	}
 
-	// check in DB
-	for _, user := range database.UsersDB {
-
-		if user.SessionToken == sToken {
-			user.CSRFToken = ""
-			user.SessionToken = ""
-			utils.UserUpdater(user)
-			break
-		}
+	// update in db
+	if err := database.DB.Model(&model.User{}).Where("session_token = ?", sToken).Updates(map[string]interface{}{
+		"session_token": "",
+		"csrf_token":    "",
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to logout"})
+		return
 	}
 
 	c.SetCookie("session_token", "", -1, "/", "", true, true)
@@ -134,22 +143,21 @@ func LogoutHandler(c *gin.Context) {
 // creation
 func CreatePostHandler(c *gin.Context) {
 	var newPost model.Post
-
 	if err := c.ShouldBindJSON(&newPost); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "not in proper form"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Invalid formate"})
 		return
 	}
 
-	auther := c.MustGet("user").(string)
-	log.Println(auther)
+	autherID := c.MustGet("userID").(uint)
 
-	//generate id
-	id := utils.GenerateID()
+	newPost.CreatedAt = time.Now()
+	newPost.AuthorID = autherID
 
-	newPost.PostID = id
-	newPost.Date = time.Now()
-	newPost.Auther = auther
-	database.PostList = append(database.PostList, newPost)
+	if err := database.DB.Create(&newPost).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cound upload right now"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"success": newPost})
 
 }
@@ -159,45 +167,85 @@ func DeletePostHandler(c *gin.Context) {
 	id := c.Param("postid")
 
 	//delete from db
-
-	for index, post := range database.PostList {
-		if post.PostID == id {
-			database.PostList = append(database.PostList[:index], database.PostList[index+1:]...)
-			c.JSON(http.StatusOK, gin.H{"success": true})
-			return
-
-		}
+	if err := database.DB.Delete(&model.Post{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could't delete from server"})
+		return
 	}
 
-	//if not deleted
-	c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+	c.JSON(http.StatusOK, gin.H{"message": "deleted successfully"})
 
 }
 
 // update post
 func UpdatePostHandler(c *gin.Context) {
-	var updatedPost model.Post
-	if err := c.ShouldBindJSON(&updatedPost); err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "post formate error"})
+	id := c.Param("postid")
+
+	// check the post in DB
+	var existingPost model.Post
+	if err := database.DB.First(&existingPost, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+
+	}
+
+	var updateData struct {
+		Title   string `json:"title"`
+		Content string `json:"content"`
+	}
+
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Invalide request body"})
 		return
 	}
 
 	//update old post with new
-	id := c.Param("postid")
-	// auther := c.MustGet("user").(string)
-	updatedPost.LastUpdate = time.Now()
-	updatedPost.PostID = id
-	// updatedPost.Auther = auther
+	if err := database.DB.Model(&existingPost).Updates(updateData).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"updated": false})
 
-	for index, post := range database.PostList {
-		if post.PostID == updatedPost.PostID {
-			// updatedPost.Date = post.Date
-			database.PostList[index] = updatedPost
-			c.JSON(http.StatusOK, gin.H{"updated": true})
-			return
-
-		}
 	}
-	c.JSON(http.StatusNotFound, gin.H{"updated": false})
+
+	c.JSON(http.StatusOK, gin.H{"updated": true, "post": existingPost})
+
+}
+
+// post page handler
+func PostPageHandler(c *gin.Context) {
+	var posts []model.Post
+	database.DB.Find(&posts)
+
+	c.JSON(http.StatusOK, gin.H{"posts": posts})
+
+}
+
+func GetPostByID(c *gin.Context) {
+
+	id := c.Param("id")
+
+	var post model.Post
+
+	if err := database.DB.First(&post, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+	}
+
+	//find the auther
+	var auther model.User
+	if err := database.DB.First(&auther, post.AuthorID).Error; err != nil {
+		log.Println(post.AuthorID)
+		c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
+		return
+
+	}
+
+	//response
+	response := model.PostResponse{
+		ID:        post.ID,
+		Title:     post.Title,
+		Content:   post.Content,
+		Author:    auther.Username,
+		CreatedAt: post.CreatedAt,
+		UpdatedAt: post.UpdatedAt,
+	}
+	c.JSON(http.StatusOK, gin.H{"post": response})
 
 }

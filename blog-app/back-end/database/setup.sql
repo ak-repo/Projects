@@ -1,6 +1,10 @@
 
 
 
+--create database 
+
+-- CREATE DATABASE blog OWNER ak;
+
 
 
 --user table
@@ -9,6 +13,7 @@ CREATE TABLE users(
     username VARCHAR(100) UNIQUE NOT NULL,
     hashed_password Text NOT NULL,
     session_token TEXT,
+    csrf_token Text,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -36,3 +41,20 @@ CREATE TABLE comments(
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+--migrated file lokks like this
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username TEXT UNIQUE,
+  hashed_password TEXT,
+  session_token TEXT UNIQUE,
+  csrf_token TEXT
+);
+
+CREATE TABLE posts (
+  id SERIAL PRIMARY KEY,
+  title TEXT,
+  content TEXT,
+  author_id INTEGER REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+);

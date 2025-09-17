@@ -1,50 +1,31 @@
 package database
 
 import (
-	"database/sql"
 	"gin-blog-app/model"
 	"log"
 
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
-// user db
-
-//map[string]model.User{}
-
-var UsersDB = []model.User{}
-
-// post db
-var PostList = []model.Post{}
-
-var DB *sql.DB
-
-// init db
+var DB *gorm.DB
 
 func InitDB() {
 
 	var err error
 
-	connStr := "user=ak dbname=blogs password=4455@mint sslmode=disable"
+	cst := "user=ak dbname=blog password=4455@mint sslmode=disable"
 
-	DB, err = sql.Open("postgres", connStr)
+	DB, err = gorm.Open(postgres.Open(cst), &gorm.Config{})
 
 	if err != nil {
-		log.Fatal("DB connection failed: ,", err)
+		log.Fatal("Database connection failed: ", err)
 	}
 
-	if err = DB.Ping(); err != nil {
-		log.Fatal("DB ping failed: ", err)
+	if err := DB.AutoMigrate(&model.User{}, &model.Post{}); err != nil {
+		log.Fatal("Database migration are failed")
 	}
-	log.Println("✅ Connected to Postgres")
+	log.Println("Connected into DB ")
 
 }
 
-// _, err := database.DB.Exec(
-// 	"INSERT INTO users (username, hashed_password) VALUES ($1, $2)",
-// 	user.Username, user.HashedPassword,
-// )
-// if err != nil {
-// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "DB insert failed"})
-// 	return
-// }

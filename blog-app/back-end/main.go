@@ -30,6 +30,7 @@ func main() {
 	//public routes
 	router.GET("/", controler.HomeHandler)
 	router.GET("/posts", controler.PostPageHandler)
+	router.GET("/post/:id", controler.GetPostByID)
 	router.POST("/register", controler.RegistrationHandler)
 	router.POST("/login", controler.LoginHandler)
 	router.POST("/logout", controler.LogoutHandler)
