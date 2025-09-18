@@ -1,36 +1,54 @@
 import axios from "axios";
 import React, { useRef, useState } from "react";
+import { authAPI } from "../../api";
+import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { setUser } from "../../state/slices/authSlice";
+import { notify } from "../../utils/notify";
 
-const authAPI = "http://localhost:8080";
 
 function AuthPage() {
   const [signIn, setSignIn] = useState(true);
   const username = useRef();
   const password = useRef();
+  const dispatch = useDispatch();
+
+  const navigate = useNavigate();
 
   // handle auth
   const handleAuth = async (e) => {
     e.preventDefault();
-
     const data = {
       username: username.current.value,
       password: password.current.value,
     };
-    console.log(data);
 
     try {
       if (signIn) {
-        const res = await axios.post(`${authAPI}/login`, JSON.stringify(data));
-        console.log(res.data);
+        // LOGIN
+        const res = await axios.post(`${authAPI}/login`, data, {
+          withCredentials: true, // 👈 important
+        });
+
+        if (res.status === 200) {
+          notify.success("User logged in!", 2000);
+
+          dispatch(setUser(res.data));
+          navigate("/"); // maybe go to home/dashboard
+        }
       } else {
-        const res = await axios.post(
-          `${authAPI}/register`,
-          JSON.stringify(data)
-        );
-        console.log(res.data);
+        // REGISTER
+        const res = await axios.post(`${authAPI}/register`, data, {
+          withCredentials: true,
+        });
+
+        if (res.status === 201) {
+          console.log("Register success:");
+          setSignIn(true);
+        }
       }
     } catch (err) {
-      console.log(err.message);
+      console.error("Auth error:", err.response?.data || err.message);
     }
   };
 

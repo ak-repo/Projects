@@ -67,7 +67,7 @@ func RegistrationHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Registration successful"})
+	c.JSON(http.StatusCreated, gin.H{"success": true})
 
 }
 
@@ -110,7 +110,7 @@ func LoginHandler(c *gin.Context) {
 	//cookie
 	c.SetCookie("session_token", sessionToken, 3600*24, "/", "", false, true)
 	c.SetCookie("csrf_token", csrfToken, 3600*24, "/", "", false, false)
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
+	c.JSON(http.StatusOK, gin.H{"ID": user.ID, "username": user.Username})
 
 }
 
@@ -211,7 +211,11 @@ func UpdatePostHandler(c *gin.Context) {
 // post page handler
 func PostPageHandler(c *gin.Context) {
 	var posts []model.Post
-	database.DB.Find(&posts)
+	if err := database.DB.Find(&posts).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found anything"})
+		return
+	}
+	// var response
 
 	c.JSON(http.StatusOK, gin.H{"posts": posts})
 
