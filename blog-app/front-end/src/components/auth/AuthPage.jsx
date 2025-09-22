@@ -6,7 +6,6 @@ import { useDispatch } from "react-redux";
 import { setUser } from "../../state/slices/authSlice";
 import { notify } from "../../utils/notify";
 
-
 function AuthPage() {
   const [signIn, setSignIn] = useState(true);
   const username = useRef();
@@ -35,6 +34,8 @@ function AuthPage() {
 
           dispatch(setUser(res.data));
           navigate("/"); // maybe go to home/dashboard
+        } else {
+          notify.error("failed to login");
         }
       } else {
         // REGISTER
